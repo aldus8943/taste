@@ -65,8 +65,8 @@ export default function Home() {
   const [currentView, setCurrentView] = useState<'list' | 'map'>('list');
 
   // 4. 데이터 상태 (PostGIS & Supabase DB 기반)
-  const [limitCount, setLimitCount] = useState<number>(20);
-  const [restaurantsWithDistance, setRestaurantsWithDistance] = useState<
+  const [displayLimit, setDisplayLimit] = useState<number>(20);
+  const [allRestaurantsWithDistance, setAllRestaurantsWithDistance] = useState<
     RestaurantWithDistance[]
   >([]);
   const [isRealData, setIsRealData] = useState<boolean>(true);
@@ -82,13 +82,13 @@ export default function Home() {
     useState<boolean>(false);
 
   // [핵심] PostGIS 공간 검색 및 거리 계산 API 호출 함수
+  // 카테고리 필터와 무관하게 해당 반경 및 검색어 조건의 모든 음식점을 수집하여
+  // '전체', '한식', '중식' 등 모든 카테고리 뱃지 숫자가 0으로 증발하지 않고 처음부터 정확히 표시되도록 합니다.
   const fetchRestaurantsData = useCallback(
     async (
       lat: number,
       lon: number,
       radius: DistanceRadius,
-      count: number,
-      cat: RestaurantCategory,
       query: string,
       refresh: boolean = false
     ) => {
@@ -97,10 +97,9 @@ export default function Home() {
       try {
         const queryRadius = radius > 0 ? radius : 1000;
         const refreshParam = refresh ? '&refresh=true' : '';
-        const catParam = cat && cat !== '전체' ? `&category=${encodeURIComponent(cat)}` : '';
         const queryParam = query.trim() ? `&query=${encodeURIComponent(query.trim())}` : '';
 
-        const url = `/api/restaurants?lat=${lat}&lon=${lon}&radius=${queryRadius}&numOfRows=${count}${catParam}${queryParam}${refreshParam}`;
+        const url = `/api/restaurants?lat=${lat}&lon=${lon}&radius=${queryRadius}&numOfRows=100${queryParam}${refreshParam}`;
         const res = await fetch(url);
         const json = await res.json();
 
@@ -109,7 +108,7 @@ export default function Home() {
         }
 
         if (json.itemsWithDistance && Array.isArray(json.itemsWithDistance)) {
-          setRestaurantsWithDistance(json.itemsWithDistance);
+          setAllRestaurantsWithDistance(json.itemsWithDistance);
           setIsRealData(Boolean(json.isRealData));
           setIsFromDb(Boolean(json.isFromDb));
           setTotalApiCount(json.totalCount || json.itemsWithDistance.length);
@@ -119,12 +118,12 @@ export default function Home() {
             restaurant: r,
             distance: calculateDistance(lat, lon, r.latitude, r.longitude),
           }));
-          setRestaurantsWithDistance(fallbackItems);
+          setAllRestaurantsWithDistance(fallbackItems);
           setIsRealData(Boolean(json.isRealData));
           setIsFromDb(Boolean(json.isFromDb));
           setTotalApiCount(json.totalCount || json.data.length);
         } else {
-          setRestaurantsWithDistance([]);
+          setAllRestaurantsWithDistance([]);
           setTotalApiCount(0);
         }
       } catch (err: unknown) {
@@ -141,24 +140,26 @@ export default function Home() {
     []
   );
 
-  // 기준 위치, 반경, 업종, 검색어, 개수 제한 변경 시 실시간 PostGIS 공간 검색
+  // 기준 위치, 반경, 검색어 변경 시 실시간 PostGIS 공간 검색
+  // (카테고리 선택 시에는 네트워크 재호출 없이 클라이언트에서 즉시 0ms 전환)
   useEffect(() => {
     fetchRestaurantsData(
       currentLocation.latitude,
       currentLocation.longitude,
       selectedRadius,
-      limitCount,
-      selectedCategory,
       searchQuery
     );
   }, [
     currentLocation,
     selectedRadius,
-    limitCount,
-    selectedCategory,
     searchQuery,
     fetchRestaurantsData,
   ]);
+
+  // 카테고리나 반경, 위치, 검색어 변경 시 페이징 개수 리셋
+  useEffect(() => {
+    setDisplayLimit(20);
+  }, [selectedCategory, selectedRadius, currentLocation, searchQuery]);
 
   // 위치나 반경이 바뀌면 조회 건수를 기본 20건으로 초기화
   const handleLocationChange = (loc: {
@@ -166,7 +167,8 @@ export default function Home() {
     latitude: number;
     longitude: number;
   }) => {
-    setLimitCount(20);
+    setDisplayLimit(20);
+    setSelectedCategory('전체');
     setCurrentLocation({
       name: loc.name,
       latitude: loc.latitude,
@@ -200,7 +202,8 @@ export default function Home() {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
-        setLimitCount(20);
+        setDisplayLimit(20);
+        setSelectedCategory('전체');
         setCurrentLocation({
           name: '내 현재 위치 (GPS)',
           latitude,
@@ -253,16 +256,12 @@ export default function Home() {
     );
   }, []);
 
-  // [요구사항] 지도와 목록에 동일한 검색 결과를 표시하기 위한 통합 배열
-  // 이미 서버/PostGIS에서 반경(500m/1km/3km) 엄격 필터링 + 업종 + 검색어 + 직선거리 정렬이 완료됨
-  const filteredRestaurants = useMemo(() => {
-    return restaurantsWithDistance;
-  }, [restaurantsWithDistance]);
-
-  // 카테고리별 개수 카운트 계산
+  // [핵심 해결] 카테고리별 개수 카운트:
+  // 현재 반경 및 검색어 조건에 속한 전체 음식점을 기준으로 모든 카테고리 숫자를 계산합니다.
+  // 따라서 다른 카테고리를 눌러도 다른 카테고리 숫자가 0으로 변하지 않고 본래 개수가 그대로 유지됩니다.
   const categoryCounts = useMemo(() => {
     const counts: Record<RestaurantCategory, number> = {
-      전체: restaurantsWithDistance.length,
+      전체: allRestaurantsWithDistance.length,
       한식: 0,
       중식: 0,
       일식: 0,
@@ -272,23 +271,41 @@ export default function Home() {
       기타: 0,
     };
 
-    restaurantsWithDistance.forEach(({ restaurant }) => {
+    allRestaurantsWithDistance.forEach(({ restaurant }) => {
       if (restaurant.category in counts) {
         counts[restaurant.category] += 1;
+      } else {
+        counts['기타'] += 1;
       }
     });
 
     return counts;
-  }, [restaurantsWithDistance]);
+  }, [allRestaurantsWithDistance]);
+
+  // [요구사항] 지도와 목록에 동일한 검색 결과를 표시하기 위한 통합 배열
+  // 선택된 카테고리에 맞춰 필터링을 수행합니다. (전체일 경우 모두 표시)
+  const filteredRestaurants = useMemo(() => {
+    if (selectedCategory === '전체') {
+      return allRestaurantsWithDistance;
+    }
+    return allRestaurantsWithDistance.filter(
+      ({ restaurant }) => restaurant.category === selectedCategory
+    );
+  }, [allRestaurantsWithDistance, selectedCategory]);
+
+  // 목록 뷰에서 20개씩 끊어서 보여줄 페이징 배열
+  const displayedRestaurants = useMemo(() => {
+    return filteredRestaurants.slice(0, displayLimit);
+  }, [filteredRestaurants, displayLimit]);
 
   // 선택된 상세 식당의 거리
   const selectedRestaurantDistance = useMemo(() => {
     if (!selectedRestaurant) return null;
-    const found = restaurantsWithDistance.find(
+    const found = allRestaurantsWithDistance.find(
       (item) => item.restaurant.id === selectedRestaurant.id
     );
     return found ? found.distance : null;
-  }, [selectedRestaurant, restaurantsWithDistance]);
+  }, [selectedRestaurant, allRestaurantsWithDistance]);
 
   // 필터 초기화
   const handleResetFilters = () => {
@@ -347,8 +364,6 @@ export default function Home() {
                   currentLocation.latitude,
                   currentLocation.longitude,
                   selectedRadius,
-                  limitCount,
-                  selectedCategory,
                   searchQuery,
                   true // 강제 최신 공공데이터 동기화 갱신
                 )
@@ -392,8 +407,6 @@ export default function Home() {
                   currentLocation.latitude,
                   currentLocation.longitude,
                   selectedRadius,
-                  limitCount,
-                  selectedCategory,
                   searchQuery
                 )
               }
@@ -446,31 +459,25 @@ export default function Home() {
           {currentView === 'list' ? (
             <div className="space-y-4">
               <RestaurantList
-                items={filteredRestaurants}
+                items={displayedRestaurants}
+                totalCount={filteredRestaurants.length}
                 onSelectRestaurant={(rest) => setSelectedRestaurant(rest)}
                 onResetFilters={handleResetFilters}
                 hasActiveFilters={hasActiveFilters}
               />
 
               {/* 더보기 버튼 */}
-              {isRealData && filteredRestaurants.length >= limitCount && filteredRestaurants.length < totalApiCount && (
+              {filteredRestaurants.length > displayLimit && (
                 <div className="pt-2 text-center">
                   <button
-                    onClick={() => setLimitCount((prev) => prev + 20)}
+                    onClick={() => setDisplayLimit((prev) => prev + 20)}
                     disabled={isLoadingData}
                     className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-white hover:bg-gray-50 border border-gray-300 text-gray-800 text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95 disabled:opacity-50"
                   >
-                    {isLoadingData ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
-                        <span>데이터 가져오는 중...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>음식점 20개 더 보기 ({filteredRestaurants.length}/{totalApiCount})</span>
-                        <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
-                      </>
-                    )}
+                    <span>
+                      음식점 더 보기 ({displayedRestaurants.length}/{filteredRestaurants.length})
+                    </span>
+                    <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
                   </button>
                 </div>
               )}

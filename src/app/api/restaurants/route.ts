@@ -130,7 +130,7 @@ export async function GET(request: Request) {
   const lon = parseFloat(searchParams.get('lon') || '127.0333');
   // 요구사항: 500m / 1km / 3km 반경 선택
   const radius = parseInt(searchParams.get('radius') || '1000', 10);
-  const numOfRows = parseInt(searchParams.get('numOfRows') || '20', 10);
+  const numOfRows = parseInt(searchParams.get('numOfRows') || '100', 10);
   const category = searchParams.get('category') || undefined;
   const query = searchParams.get('query') || undefined;
   const forceRefresh = searchParams.get('refresh') === 'true';
@@ -150,7 +150,7 @@ export async function GET(request: Request) {
           radius_meters: targetRadius,
           category_filter: category && category !== '전체' ? category : null,
           search_query: query ? query.trim() : null,
-          limit_count: numOfRows,
+          limit_count: Math.max(numOfRows, 100),
         }
       );
 
@@ -160,6 +160,26 @@ export async function GET(request: Request) {
           mapRowToRestaurantWithDistance(row, lat, lon)
         );
 
+        // 카테고리별 개수 요약
+        const categoryCounts: Record<string, number> = {
+          전체: items.length,
+          한식: 0,
+          중식: 0,
+          일식: 0,
+          양식: 0,
+          분식: 0,
+          '카페/디저트': 0,
+          기타: 0,
+        };
+
+        items.forEach(({ restaurant }) => {
+          if (restaurant.category in categoryCounts) {
+            categoryCounts[restaurant.category]++;
+          } else {
+            categoryCounts['기타']++;
+          }
+        });
+
         return NextResponse.json({
           success: true,
           isRealData: true,
@@ -168,6 +188,7 @@ export async function GET(request: Request) {
           totalCount: items.length,
           data: items.map((i) => i.restaurant),
           itemsWithDistance: items,
+          categoryCounts,
           source: 'Supabase PostGIS 공간 인덱스 검색',
         });
       }
@@ -189,8 +210,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 공공데이터포털 API 호출 (서버 전용)
-    const apiUrl = `https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius?serviceKey=${apiKey}&pageNo=1&numOfRows=60&radius=${targetRadius}&cx=${lon}&cy=${lat}&indsLclsCd=I2&type=json`;
+    // 공공데이터포털 API 호출 (서버 전용, 최대 100건 수집)
+    const apiUrl = `https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius?serviceKey=${apiKey}&pageNo=1&numOfRows=100&radius=${targetRadius}&cx=${lon}&cy=${lat}&indsLclsCd=I2&type=json`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -216,6 +237,16 @@ export async function GET(request: Request) {
         totalCount: 0,
         data: [],
         itemsWithDistance: [],
+        categoryCounts: {
+          전체: 0,
+          한식: 0,
+          중식: 0,
+          일식: 0,
+          양식: 0,
+          분식: 0,
+          '카페/디저트': 0,
+          기타: 0,
+        },
         message: '해당 반경 내에 등록된 공공데이터 음식점이 없습니다.',
       });
     }
@@ -269,13 +300,40 @@ export async function GET(request: Request) {
     }
 
     // 4. [서버 계산 검증] PostGIS와 100% 동일한 구면 삼각법(Haversine)으로 반경 안/밖 필터링 및 직선거리 정렬
-    const mappedItems = upsertRows
+    const allRadiusItems = upsertRows
       .map((row) => mapRowToRestaurantWithDistance(row, lat, lon))
-      .filter(({ restaurant, distance }) => {
+      .filter(({ distance }) => {
         // [반경 검증] distance <= targetRadius 인 음식점만 통과 (반경 밖은 엄격히 제외)
-        if (distance !== null && distance > targetRadius) {
-          return false;
-        }
+        return distance !== null && distance <= targetRadius;
+      })
+      .sort((a, b) => {
+        if (a.distance === null) return 1;
+        if (b.distance === null) return -1;
+        return a.distance - b.distance;
+      });
+
+    // 카테고리별 개수 카운트 계산 (해당 반경 내 모든 업종의 실제 수)
+    const categoryCounts: Record<string, number> = {
+      전체: allRadiusItems.length,
+      한식: 0,
+      중식: 0,
+      일식: 0,
+      양식: 0,
+      분식: 0,
+      '카페/디저트': 0,
+      기타: 0,
+    };
+
+    allRadiusItems.forEach(({ restaurant }) => {
+      if (restaurant.category in categoryCounts) {
+        categoryCounts[restaurant.category]++;
+      } else {
+        categoryCounts['기타']++;
+      }
+    });
+
+    const mappedItems = allRadiusItems
+      .filter(({ restaurant }) => {
         // 업종 필터
         if (category && category !== '전체' && restaurant.category !== category) {
           return false;
@@ -290,12 +348,6 @@ export async function GET(request: Request) {
         }
         return true;
       })
-      // [직선거리 정렬] 가까운 순서(오름차순) 정렬
-      .sort((a, b) => {
-        if (a.distance === null) return 1;
-        if (b.distance === null) return -1;
-        return a.distance - b.distance;
-      })
       // [개수 제한]
       .slice(0, numOfRows);
 
@@ -306,6 +358,7 @@ export async function GET(request: Request) {
       totalCount: mappedItems.length,
       data: mappedItems.map((i) => i.restaurant),
       itemsWithDistance: mappedItems,
+      categoryCounts,
       source: '공공데이터 수집 및 Supabase DB 동기화 완료',
     });
   } catch (error: unknown) {

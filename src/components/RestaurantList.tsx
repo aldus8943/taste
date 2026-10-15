@@ -12,6 +12,7 @@ interface RestaurantWithDistance {
 
 interface RestaurantListProps {
   items: RestaurantWithDistance[];
+  totalCount?: number;
   onSelectRestaurant: (restaurant: Restaurant) => void;
   onResetFilters: () => void;
   hasActiveFilters: boolean;
@@ -19,6 +20,7 @@ interface RestaurantListProps {
 
 export default function RestaurantList({
   items,
+  totalCount,
   onSelectRestaurant,
   onResetFilters,
   hasActiveFilters,
@@ -41,7 +43,7 @@ export default function RestaurantList({
       {/* 목록 헤더: 총 결과 수 및 정렬 */}
       <div className="flex items-center justify-between px-1 text-xs text-gray-600">
         <div>
-          총 <span className="font-bold text-gray-900">{items.length}</span>곳의
+          총 <span className="font-bold text-gray-900">{totalCount ?? items.length}</span>곳의
           음식점
         </div>
 
