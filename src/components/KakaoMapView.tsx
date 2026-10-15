@@ -90,8 +90,9 @@ export default function KakaoMapView({
 
     script.onerror = () => {
       setSdkStatus('fallback');
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://taste-dr8l.vercel.app';
       setErrorMessage(
-        '카카오 지도 SDK를 불러오지 못했습니다. 카카오 개발자 콘솔에서 플랫폼 도메인(http://localhost:3000) 등록 여부를 확인해 주세요.'
+        `카카오 지도 SDK를 불러오지 못했습니다. 카카오 개발자 콘솔의 [Web 플랫폼 사이트 도메인]에 현재 주소(${origin})를 등록해 주세요.`
       );
     };
 
@@ -240,15 +241,29 @@ export default function KakaoMapView({
             <div>
               <p className="font-bold">카카오 지도 안내</p>
               <p className="text-[11px] text-amber-800 mt-0.5">{errorMessage}</p>
-              <a
-                href="https://developers.kakao.com/console"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-bold underline mt-1"
-              >
-                카카오 개발자 콘솔 바로가기 (Web 플랫폼 사이트 도메인 등록)
-                <ExternalLink className="w-3 h-3" />
-              </a>
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      navigator.clipboard.writeText(window.location.origin);
+                      alert(`현재 도메인(${window.location.origin})이 클립보드에 복사되었습니다!\n카카오 개발자 콘솔 [플랫폼] > [Web] 사이트 도메인에 붙여넣어 등록해 주세요.`);
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-md font-bold text-[11px] transition-colors cursor-pointer"
+                >
+                  현재 도메인 복사
+                </button>
+                <a
+                  href="https://developers.kakao.com/console"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-bold underline"
+                >
+                  카카오 개발자 콘솔 바로가기 (Web 플랫폼 사이트 도메인 등록)
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
             </div>
           </div>
         )}
