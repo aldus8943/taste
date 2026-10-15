@@ -277,6 +277,39 @@ export default function KakaoMapView({
     );
   }
 
+  // 카카오맵 웹/앱으로 연결
+  const handleOpenKakaoMap = () => {
+    // 1. 선택된 음식점이 있는 경우 해당 음식점 카카오맵 페이지로 이동
+    if (activeRestaurant) {
+      const { restaurant } = activeRestaurant;
+      const url =
+        restaurant.hasCoordinates && restaurant.latitude && restaurant.longitude
+          ? `https://map.kakao.com/link/map/${encodeURIComponent(restaurant.name)},${restaurant.latitude},${restaurant.longitude}`
+          : `https://map.kakao.com/link/search/${encodeURIComponent(restaurant.roadAddress || restaurant.name)}`;
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    // 2. 현재 지도 중심 좌표 기준으로 카카오맵 이동
+    let lat = currentLocation.latitude;
+    let lng = currentLocation.longitude;
+    if (mapInstanceRef.current && window.kakao?.maps) {
+      try {
+        const center = mapInstanceRef.current.getCenter();
+        if (center) {
+          lat = center.getLat();
+          lng = center.getLng();
+        }
+      } catch (err) {
+        console.error('Failed to get map center:', err);
+      }
+    }
+
+    const title = currentLocation.name ? `${currentLocation.name} 맛집` : '내 주변 맛집';
+    const url = `https://map.kakao.com/link/map/${encodeURIComponent(title)},${lat},${lng}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <div className="relative w-full h-[520px] sm:h-[600px] bg-slate-100 rounded-2xl overflow-hidden border border-gray-300 shadow-inner flex flex-col">
       {/* 상단 오버레이 헤더 */}
@@ -290,9 +323,19 @@ export default function KakaoMapView({
           </span>
         </div>
 
-        <div className="bg-yellow-400 text-yellow-950 font-bold px-2.5 py-1 rounded-lg text-[11px] shadow-xs pointer-events-auto flex items-center gap-1">
+        <button
+          type="button"
+          onClick={handleOpenKakaoMap}
+          className="bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-yellow-950 font-bold px-2.5 py-1.5 rounded-lg text-[11px] shadow-xs hover:shadow-md pointer-events-auto flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer group"
+          title={
+            activeRestaurant
+              ? `카카오맵에서 '${activeRestaurant.restaurant.name}' 보기 (새 창)`
+              : '카카오맵에서 현재 위치 지도 보기 (새 창)'
+          }
+        >
           <span>카카오 지도 정식 연동</span>
-        </div>
+          <ExternalLink className="w-3.5 h-3.5 text-yellow-900 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+        </button>
       </div>
 
       {/* 카카오 지도 렌더링 컨테이너 */}
@@ -340,13 +383,32 @@ export default function KakaoMapView({
               </p>
             </div>
 
-            <button
-              onClick={() => onSelectRestaurant(activeRestaurant.restaurant)}
-              className="shrink-0 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
-            >
-              <span>상세보기</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const { restaurant } = activeRestaurant;
+                  const url =
+                    restaurant.hasCoordinates && restaurant.latitude && restaurant.longitude
+                      ? `https://map.kakao.com/link/map/${encodeURIComponent(restaurant.name)},${restaurant.latitude},${restaurant.longitude}`
+                      : `https://map.kakao.com/link/search/${encodeURIComponent(restaurant.roadAddress || restaurant.name)}`;
+                  window.open(url, '_blank', 'noopener,noreferrer');
+                }}
+                className="px-2.5 py-2 bg-yellow-400 hover:bg-yellow-300 text-yellow-950 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+                title="카카오맵에서 보기 (새 창)"
+              >
+                <span>카카오맵</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onSelectRestaurant(activeRestaurant.restaurant)}
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
+              >
+                <span>상세보기</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       )}

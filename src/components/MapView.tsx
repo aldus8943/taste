@@ -8,6 +8,7 @@ import {
   Info,
   Layers,
   ChevronRight,
+  ExternalLink,
 } from 'lucide-react';
 import { Restaurant, UserLocation, DistanceRadius } from '@/types/restaurant';
 import { formatDistance } from '@/utils/distance';
@@ -75,8 +76,31 @@ export default function MapView({
           </span>
         </div>
 
-        <div className="bg-emerald-700/90 text-white backdrop-blur-md px-2.5 py-1 rounded-lg text-[11px] font-semibold shadow-xs">
-          1단계 인터랙티브 맵
+        <div className="flex items-center gap-1.5 pointer-events-auto">
+          <div className="bg-emerald-700/90 text-white backdrop-blur-md px-2.5 py-1 rounded-lg text-[11px] font-semibold shadow-xs">
+            1단계 인터랙티브 맵
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const selectedPin = restaurants.find(r => r.restaurant.id === selectedPinId)?.restaurant;
+              if (selectedPin) {
+                const url = selectedPin.hasCoordinates && selectedPin.latitude && selectedPin.longitude
+                  ? `https://map.kakao.com/link/map/${encodeURIComponent(selectedPin.name)},${selectedPin.latitude},${selectedPin.longitude}`
+                  : `https://map.kakao.com/link/search/${encodeURIComponent(selectedPin.roadAddress || selectedPin.name)}`;
+                window.open(url, '_blank', 'noopener,noreferrer');
+              } else {
+                const title = currentLocation.name ? `${currentLocation.name} 맛집` : '내 주변 맛집';
+                const url = `https://map.kakao.com/link/map/${encodeURIComponent(title)},${currentLocation.latitude},${currentLocation.longitude}`;
+                window.open(url, '_blank', 'noopener,noreferrer');
+              }
+            }}
+            className="bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-yellow-950 font-bold px-2.5 py-1.5 rounded-lg text-[11px] shadow-xs hover:shadow-md flex items-center gap-1 transition-all active:scale-95 cursor-pointer"
+            title="카카오맵에서 위치 보기 (새 창)"
+          >
+            <span>카카오 지도 연동</span>
+            <ExternalLink className="w-3.5 h-3.5 text-yellow-950" />
+          </button>
         </div>
       </div>
 
@@ -191,15 +215,33 @@ export default function MapView({
               </p>
             </div>
 
-            <button
-              onClick={() =>
-                onSelectRestaurant(activeRestaurantWithDist.restaurant)
-              }
-              className="shrink-0 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
-            >
-              <span>상세보기</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const r = activeRestaurantWithDist.restaurant;
+                  const url =
+                    r.hasCoordinates && r.latitude && r.longitude
+                      ? `https://map.kakao.com/link/map/${encodeURIComponent(r.name)},${r.latitude},${r.longitude}`
+                      : `https://map.kakao.com/link/search/${encodeURIComponent(r.roadAddress || r.name)}`;
+                  window.open(url, '_blank', 'noopener,noreferrer');
+                }}
+                className="px-2.5 py-2 bg-yellow-400 hover:bg-yellow-300 text-yellow-950 text-xs font-bold rounded-lg transition-colors flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+                title="카카오맵에서 보기 (새 창)"
+              >
+                <span>카카오맵</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() =>
+                  onSelectRestaurant(activeRestaurantWithDist.restaurant)
+                }
+                className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer active:scale-95"
+              >
+                <span>상세보기</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       )}
