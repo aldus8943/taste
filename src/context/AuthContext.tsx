@@ -141,6 +141,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let msg = error.message;
         if (error.message.includes('Invalid login credentials')) {
           msg = '이메일 또는 비밀번호가 일치하지 않습니다.';
+        } else if (error.message.includes('Email not confirmed')) {
+          msg =
+            '이메일 인증이 아직 완료되지 않았습니다. 안내해 드린 Supabase SQL을 실행하시면 즉시 인증 처리되어 로그인할 수 있습니다.';
         }
         return { success: false, error: msg };
       }
@@ -181,14 +184,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         let msg = error.message;
         if (error.message.includes('already registered')) {
-          msg = '이미 가입된 이메일 주소입니다.';
+          msg = '이미 가입된 이메일 주소입니다. 상단의 로그인 탭을 이용해 주세요.';
         } else if (error.message.includes('Password should be at least')) {
           msg = '비밀번호는 최소 6자 이상이어야 합니다.';
+        } else if (error.message.includes('rate limit')) {
+          msg =
+            '이메일 전송 한도가 초과되었습니다. 이미 가입된 계정이거나, 상단의 로그인 탭을 이용해 주세요.';
         }
         return { success: false, error: msg };
       }
 
       if (data.user) {
+        // 이미 가입된 이메일인 경우 Supabase는 보안상 identities 빈 배열을 반환함
+        if (data.user.identities && data.user.identities.length === 0) {
+          return {
+            success: false,
+            error: '이미 가입되어 있는 이메일입니다. [로그인] 탭으로 전환하여 로그인해 주세요.',
+          };
+        }
+
         setUser(data.user);
         // 프로필 테이블 직접 등록 (트리거 실패 대비 upsert)
         try {

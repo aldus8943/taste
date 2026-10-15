@@ -51,10 +51,16 @@ export default function AuthModal() {
 
   // 빠른 테스트용 관리자/데모 계정 자동 입력
   const handleDemoFill = () => {
-    setEmail('demo@taste.com');
-    setPassword('test1234!');
     if (authModalMode === 'signup') {
-      setNickname('맛있는동네탐험가');
+      // 신규 회원가입 시 이메일 중복 방지를 위해 고유 테스트 이메일 생성
+      const randomSuffix = Math.floor(Math.random() * 8999 + 1000);
+      setEmail(`tester_${randomSuffix}@taste.com`);
+      setPassword('test1234!');
+      setNickname(`동네미식가${randomSuffix}`);
+    } else {
+      // 로그인 시 공용 데모 계정 입력
+      setEmail('demo@taste.com');
+      setPassword('test1234!');
     }
     setErrorMessage(null);
   };
@@ -209,8 +215,45 @@ export default function AuthModal() {
               className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-medium transition-colors flex items-center justify-center gap-1.5"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>테스트용 정보 자동 채우기</span>
+              <span>
+                {authModalMode === 'signup'
+                  ? '신규 테스트 계정 자동 생성'
+                  : '데모 계정 자동 채우기'}
+              </span>
             </button>
+          </div>
+
+          {/* 탭 전환 텍스트 안내 */}
+          <div className="pt-1 text-center text-xs text-gray-500">
+            {authModalMode === 'signup' ? (
+              <span>
+                이미 가입하셨나요?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMessage(null);
+                    openAuthModal('login');
+                  }}
+                  className="text-emerald-700 font-bold hover:underline"
+                >
+                  로그인하기
+                </button>
+              </span>
+            ) : (
+              <span>
+                아직 계정이 없으신가요?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMessage(null);
+                    openAuthModal('signup');
+                  }}
+                  className="text-emerald-700 font-bold hover:underline"
+                >
+                  회원가입하기
+                </button>
+              </span>
+            )}
           </div>
         </form>
       </div>

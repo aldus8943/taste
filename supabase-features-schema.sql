@@ -1,12 +1,33 @@
 -- ====================================================================
--- [동네식당] Supabase 데이터베이스 통합 스키마 (1회 복사 & 실행)
--- 프로필, 즐겨찾기, 리뷰 및 다중 사진, 신고 및 관리 기능
+-- [동네식당] Supabase 데이터베이스 통합 권한 & 스키마 (1회 복사 & 실행)
+-- 이메일 자동인증, 테이블 권한(42501 해결), 프로필, 즐겨찾기, 리뷰, 신고
 -- ====================================================================
 
--- 0. 기본 확장 설치
+-- 1. 기존 유저 및 데모 계정 이메일 인증 즉시 완료
+UPDATE auth.users 
+SET email_confirmed_at = now() 
+WHERE email_confirmed_at IS NULL;
+
+-- 2. 신규 가입자 자동 이메일 인증 완료 트리거 (이메일 발송 없이 즉시 가입/로그인 가능)
+CREATE OR REPLACE FUNCTION public.auto_confirm_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.email_confirmed_at := COALESCE(NEW.email_confirmed_at, now());
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_auto_confirm ON auth.users;
+CREATE TRIGGER on_auth_user_auto_confirm
+BEFORE INSERT ON auth.users
+FOR EACH ROW EXECUTE FUNCTION public.auto_confirm_new_user();
+
+
+-- 3. 기본 확장 설치
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 1. restaurants 테이블 (음식점 캐싱)
+
+-- 4. restaurants 테이블 (음식점 캐싱)
 CREATE TABLE IF NOT EXISTS public.restaurants (
     id TEXT PRIMARY KEY,
     original_id TEXT NOT NULL,
@@ -37,7 +58,7 @@ DROP POLICY IF EXISTS "누구나 음식점 저장/수정 가능" ON public.resta
 CREATE POLICY "누구나 음식점 저장/수정 가능" ON public.restaurants FOR ALL USING (true);
 
 
--- 2. profiles 테이블 (회원 닉네임 및 관리자 권한)
+-- 5. profiles 테이블 (회원 닉네임 및 관리자 권한)
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     nickname TEXT NOT NULL,
@@ -75,7 +96,7 @@ DROP POLICY IF EXISTS "프로필 수정/삽입 허용" ON public.profiles;
 CREATE POLICY "프로필 수정/삽입 허용" ON public.profiles FOR ALL USING (true);
 
 
--- 3. reviews 테이블 (음식점 리뷰, 1~5점 별점, 다중 사진 base64/url)
+-- 6. reviews 테이블 (음식점 리뷰, 1~5점 별점, 다중 사진 base64/url)
 CREATE TABLE IF NOT EXISTS public.reviews (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     restaurant_id TEXT NOT NULL,
@@ -104,7 +125,7 @@ DROP POLICY IF EXISTS "리뷰 삭제 허용" ON public.reviews;
 CREATE POLICY "리뷰 삭제 허용" ON public.reviews FOR DELETE USING (true);
 
 
--- 4. favorites 테이블 (회원별 즐겨찾기)
+-- 7. favorites 테이블 (회원별 즐겨찾기)
 CREATE TABLE IF NOT EXISTS public.favorites (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -125,7 +146,7 @@ DROP POLICY IF EXISTS "즐겨찾기 삭제 허용" ON public.favorites;
 CREATE POLICY "즐겨찾기 삭제 허용" ON public.favorites FOR DELETE USING (true);
 
 
--- 5. reports 테이블 (리뷰 신고 및 관리 기능)
+-- 8. reports 테이블 (리뷰 신고 및 관리 기능)
 CREATE TABLE IF NOT EXISTS public.reports (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     review_id UUID NOT NULL REFERENCES public.reviews(id) ON DELETE CASCADE,
@@ -149,3 +170,14 @@ DROP POLICY IF EXISTS "신고 제출 허용" ON public.reports;
 CREATE POLICY "신고 제출 허용" ON public.reports FOR INSERT WITH CHECK (true);
 DROP POLICY IF EXISTS "신고 상태 변경 허용" ON public.reports;
 CREATE POLICY "신고 상태 변경 허용" ON public.reports FOR UPDATE USING (true);
+
+
+-- 9. 웹 클라이언트 권한 부여 (42501 permission denied 에러 완전 방지)
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
