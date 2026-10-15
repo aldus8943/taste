@@ -172,7 +172,29 @@ DROP POLICY IF EXISTS "신고 상태 변경 허용" ON public.reports;
 CREATE POLICY "신고 상태 변경 허용" ON public.reports FOR UPDATE USING (true);
 
 
--- 9. 웹 클라이언트 권한 부여 (42501 permission denied 에러 완전 방지)
+-- 9. role_delegations 테이블 (관리자 권한 위임 및 이양 이력 관리)
+CREATE TABLE IF NOT EXISTS public.role_delegations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    target_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    target_nickname TEXT NOT NULL,
+    granted_by UUID REFERENCES auth.users(id),
+    granted_by_nickname TEXT,
+    granted_role TEXT NOT NULL DEFAULT 'admin' CHECK (granted_role IN ('user', 'admin')),
+    reason TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_role_delegations_target ON public.role_delegations(target_user_id);
+CREATE INDEX IF NOT EXISTS idx_role_delegations_created ON public.role_delegations(created_at DESC);
+
+ALTER TABLE public.role_delegations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "누구나 권한 이양 이력 조회 가능" ON public.role_delegations;
+CREATE POLICY "누구나 권한 이양 이력 조회 가능" ON public.role_delegations FOR SELECT USING (true);
+DROP POLICY IF EXISTS "권한 이양 이력 저장 허용" ON public.role_delegations;
+CREATE POLICY "권한 이양 이력 저장 허용" ON public.role_delegations FOR INSERT WITH CHECK (true);
+
+
+-- 10. 웹 클라이언트 권한 부여 (42501 permission denied 에러 완전 방지)
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;

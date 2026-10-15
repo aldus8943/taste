@@ -53,3 +53,14 @@ export interface Report {
   resolvedBy?: string;
   review?: Review;
 }
+
+export interface RoleDelegation {
+  id: string;
+  targetUserId: string;
+  targetNickname: string;
+  grantedBy?: string;
+  grantedByNickname?: string;
+  grantedRole: UserRole;
+  reason?: string;
+  createdAt: string;
+}
