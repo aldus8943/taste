@@ -173,7 +173,7 @@ export default function RestaurantDetail({
 
       const json = await res.json();
       if (!res.ok || !json.success) {
-        throw new Error(json.message || '리뷰 등록에 실패했습니다.');
+        throw new Error(json.message || json.detail || '리뷰 등록에 실패했습니다.');
       }
 
       // 등록 성공

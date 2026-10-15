@@ -102,7 +102,27 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      throw error;
+      console.error('Reviews Supabase insert error:', error);
+      let errorMsg = '리뷰를 등록하지 못했습니다.';
+      if (
+        error.code === 'PGRST205' ||
+        error.message?.includes('Could not find the table') ||
+        error.message?.includes('relation "public.reviews" does not exist')
+      ) {
+        errorMsg =
+          '데이터베이스에 reviews 테이블이 생성되지 않았습니다. 안내해 드린 SQL을 Supabase SQL Editor에서 실행해 주세요.';
+      } else if (error.message) {
+        errorMsg = `리뷰 등록 실패: ${error.message}`;
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          message: errorMsg,
+          detail: error.message,
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
@@ -122,10 +142,22 @@ export async function POST(request: Request) {
     });
   } catch (err: unknown) {
     console.error('Reviews POST error:', err);
+    const errObj = err as { code?: string; message?: string };
+    let errorMsg = '리뷰를 등록하지 못했습니다.';
+    if (
+      errObj?.code === 'PGRST205' ||
+      errObj?.message?.includes('Could not find the table')
+    ) {
+      errorMsg =
+        '데이터베이스에 reviews 테이블이 생성되지 않았습니다. 안내해 드린 SQL을 Supabase SQL Editor에서 실행해 주세요.';
+    } else if (err instanceof Error) {
+      errorMsg = `리뷰 등록 실패: ${err.message}`;
+    }
+
     return NextResponse.json(
       {
         success: false,
-        message: '리뷰를 등록하지 못했습니다.',
+        message: errorMsg,
         detail: err instanceof Error ? err.message : String(err),
       },
       { status: 500 }
