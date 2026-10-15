@@ -308,10 +308,16 @@ export default function Home() {
   // 즐겨찾기 모드인지 일반 반경 탐색 모드인지에 따라 식당 풀 결정
   const currentRestaurantPool = useMemo(() => {
     if (showFavoritesOnly) {
-      return favoriteRestaurants;
+      if (favoriteRestaurants.length > 0) {
+        return favoriteRestaurants;
+      }
+      // 로딩 중이거나 아직 API 응답 전이면 현재 로드된 목록 중 찜한 식당 즉시 표시
+      return allRestaurantsWithDistance.filter(({ restaurant }) =>
+        favoriteIds.has(restaurant.id)
+      );
     }
     return allRestaurantsWithDistance;
-  }, [showFavoritesOnly, favoriteRestaurants, allRestaurantsWithDistance]);
+  }, [showFavoritesOnly, favoriteRestaurants, allRestaurantsWithDistance, favoriteIds]);
 
   // [핵심 해결] 카테고리별 개수 카운트:
   // 현재 반경 및 검색어 조건에 속한 전체 음식점을 기준으로 모든 카테고리 숫자를 계산합니다.
@@ -402,7 +408,7 @@ export default function Home() {
         isLocating={isLocating}
         isRealData={isRealData}
         isFromDb={isFromDb}
-        totalApiCount={showFavoritesOnly ? favoriteRestaurants.length : totalApiCount}
+        totalApiCount={showFavoritesOnly ? currentRestaurantPool.length : totalApiCount}
         showFavoritesOnly={showFavoritesOnly}
         onToggleFavoritesOnly={() => setShowFavoritesOnly((prev) => !prev)}
         onOpenLocationModal={() => {
@@ -431,9 +437,9 @@ export default function Home() {
               <div>
                 <span className="font-bold">내 즐겨찾기 맛집 모아보기</span>
                 <span className="text-[11px] text-rose-600 ml-1.5 font-medium">
-                  {isLoadingFavorites
+                  {isLoadingFavorites && currentRestaurantPool.length === 0
                     ? '(불러오는 중...)'
-                    : `(총 ${favoriteRestaurants.length}곳)`}
+                    : `(총 ${currentRestaurantPool.length}곳)`}
                 </span>
               </div>
             </div>
