@@ -33,6 +33,9 @@ import {
   DEFAULT_LOCATION,
 } from '@/data/sampleRestaurants';
 import { calculateDistance } from '@/utils/distance';
+import { apiUrl } from '@/lib/api';
+import { getUnifiedCurrentPosition } from '@/utils/location';
+import { Capacitor } from '@capacitor/core';
 
 interface RestaurantWithDistance {
   restaurant: Restaurant;
@@ -111,7 +114,9 @@ export default function Home() {
         const refreshParam = refresh ? '&refresh=true' : '';
         const queryParam = query.trim() ? `&query=${encodeURIComponent(query.trim())}` : '';
 
-        const url = `/api/restaurants?lat=${lat}&lon=${lon}&radius=${queryRadius}&numOfRows=100${queryParam}${refreshParam}`;
+        const url = apiUrl(
+          `/api/restaurants?lat=${lat}&lon=${lon}&radius=${queryRadius}&numOfRows=100${queryParam}${refreshParam}`
+        );
         const res = await fetch(url);
         const json = await res.json();
 
@@ -176,7 +181,7 @@ export default function Home() {
     }
     setIsLoadingFavorites(true);
     try {
-      const res = await fetch(`/api/favorites?userId=${user.id}`);
+      const res = await fetch(apiUrl(`/api/favorites?userId=${user.id}`));
       const json = await res.json();
       if (json.success && Array.isArray(json.favorites)) {
         const items: RestaurantWithDistance[] = json.favorites.map(
@@ -204,6 +209,41 @@ export default function Home() {
       fetchUserFavorites();
     }
   }, [showFavoritesOnly, fetchUserFavorites, favoriteIds]);
+
+  // Android 네이티브 뒤로가기 버튼 처리
+  useEffect(() => {
+    let removeListener: (() => void) | undefined;
+
+    async function setupBackButton() {
+      if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+        try {
+          const { App } = await import('@capacitor/app');
+          const handle = await App.addListener('backButton', ({ canGoBack }) => {
+            if (selectedRestaurant) {
+              setSelectedRestaurant(null);
+            } else if (isLocationModalOpen) {
+              setIsLocationModalOpen(false);
+            } else if (isAdminModalOpen) {
+              setIsAdminModalOpen(false);
+            } else if (canGoBack) {
+              window.history.back();
+            } else {
+              App.exitApp();
+            }
+          });
+          removeListener = () => handle.remove();
+        } catch (e) {
+          console.warn('Back button listener setup failed:', e);
+        }
+      }
+    }
+
+    setupBackButton();
+
+    return () => {
+      if (removeListener) removeListener();
+    };
+  }, [selectedRestaurant, isLocationModalOpen, isAdminModalOpen]);
 
   // 카테고리나 반경, 위치, 검색어 변경 시 페이징 개수 리셋
   useEffect(() => {
@@ -234,75 +274,34 @@ export default function Home() {
    * - 사용자 현재 위치는 DB에 저장하지 않음 (메모리 상태로만 유지)
    * - 권한 거부, 시간 초과, 미지원 시 정밀 에러 처리 및 지역 직접 선택 모달 오픈
    */
-  const handleRequestGeolocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      const msg =
-        '현재 사용 중인 브라우저가 위치 정보 서비스를 지원하지 않습니다.\n아래에서 기준 동네를 직접 선택해 주세요.';
-      setLocationErrorDetail(msg);
-      setLocationToast('위치 서비스를 지원하지 않는 브라우저입니다.');
-      setIsLocationModalOpen(true);
-      return;
-    }
-
+  const handleRequestGeolocation = useCallback(async () => {
     setIsLocating(true);
     setLocationToast('현재 내 위치(GPS)를 확인하고 있습니다...');
     setLocationErrorDetail(null);
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setDisplayLimit(20);
-        setSelectedCategory('전체');
-        setCurrentLocation({
-          name: '내 현재 위치 (GPS)',
-          latitude,
-          longitude,
-          isCustom: false,
-        });
-        setIsLocating(false);
-        setLocationErrorDetail(null);
-        setLocationToast('내 GPS 위치로 기준 좌표가 설정되었습니다.');
-        setTimeout(() => setLocationToast(null), 3000);
-      },
-      (error) => {
-        setIsLocating(false);
-        let errorMsg = '';
-        let toastMsg = '';
+    const { coords, error } = await getUnifiedCurrentPosition();
 
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMsg =
-              '브라우저 위치 권한이 차단(거부)되었습니다.\n브라우저 주소창 설정에서 권한을 허용하시거나, 아래에서 원하시는 지역을 직접 선택해 주세요.';
-            toastMsg = '위치 권한이 거부되었습니다. 지역을 직접 선택해 주세요.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMsg =
-              'GPS 신호를 수신할 수 없거나 현재 위치 정보를 확인할 수 없습니다.\n아래에서 기준 지역을 직접 선택해 주세요.';
-            toastMsg = '현재 위치를 확인할 수 없습니다. 지역을 직접 선택해 주세요.';
-            break;
-          case error.TIMEOUT:
-            errorMsg =
-              '위치 확인 응답 시간이 초과되었습니다.\n다시 시도하거나 아래에서 지역을 직접 선택해 주세요.';
-            toastMsg = '위치 확인 시간이 초과되었습니다. 지역을 직접 선택해 주세요.';
-            break;
-          default:
-            errorMsg =
-              '알 수 없는 오류로 위치 정보를 가져오지 못했습니다.\n지역을 직접 선택해 주세요.';
-            toastMsg = '위치 정보를 가져올 수 없습니다.';
-            break;
-        }
+    setIsLocating(false);
 
-        setLocationErrorDetail(errorMsg);
-        setLocationToast(toastMsg);
-        setIsLocationModalOpen(true);
-        setTimeout(() => setLocationToast(null), 4000);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 8000,
-        maximumAge: 0,
-      }
-    );
+    if (coords) {
+      const { latitude, longitude } = coords;
+      setDisplayLimit(20);
+      setSelectedCategory('전체');
+      setCurrentLocation({
+        name: '내 현재 위치 (GPS)',
+        latitude,
+        longitude,
+        isCustom: false,
+      });
+      setLocationErrorDetail(null);
+      setLocationToast('내 GPS 위치로 기준 좌표가 설정되었습니다.');
+      setTimeout(() => setLocationToast(null), 3000);
+    } else if (error) {
+      setLocationErrorDetail(error.message);
+      setLocationToast(error.toastMessage);
+      setIsLocationModalOpen(true);
+      setTimeout(() => setLocationToast(null), 4000);
+    }
   }, []);
 
   // 즐겨찾기 모드인지 일반 반경 탐색 모드인지에 따라 식당 풀 결정

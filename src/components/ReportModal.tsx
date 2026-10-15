@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { X, ShieldAlert, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { apiUrl } from '@/lib/api';
 import { Review } from '@/types/features';
 
 interface ReportModalProps {
@@ -47,7 +48,7 @@ export default function ReportModal({
     setErrorMsg(null);
 
     try {
-      const res = await fetch('/api/reports', {
+      const res = await fetch(apiUrl('/api/reports'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

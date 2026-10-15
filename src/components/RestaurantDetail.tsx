@@ -25,6 +25,7 @@ import { Restaurant } from '@/types/restaurant';
 import { Review, ReviewStats } from '@/types/features';
 import { formatDistance } from '@/utils/distance';
 import { useAuth } from '@/context/AuthContext';
+import { apiUrl } from '@/lib/api';
 import ReportModal from './ReportModal';
 
 interface RestaurantDetailProps {
@@ -66,7 +67,9 @@ export default function RestaurantDetail({
   const fetchReviews = useCallback(async (restaurantId: string) => {
     setIsLoadingReviews(true);
     try {
-      const res = await fetch(`/api/reviews?restaurantId=${encodeURIComponent(restaurantId)}`);
+      const res = await fetch(
+        apiUrl(`/api/reviews?restaurantId=${encodeURIComponent(restaurantId)}`)
+      );
       const json = await res.json();
       if (json.success) {
         setReviews(json.reviews || []);
@@ -158,7 +161,7 @@ export default function RestaurantDetail({
     setReviewError(null);
 
     try {
-      const res = await fetch('/api/reviews', {
+      const res = await fetch(apiUrl('/api/reviews'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -194,9 +197,12 @@ export default function RestaurantDetail({
     if (!confirm('정말 이 리뷰를 삭제하시겠습니까?')) return;
 
     try {
-      const res = await fetch(`/api/reviews?id=${reviewId}&userId=${user.id}`, {
-        method: 'DELETE',
-      });
+      const res = await fetch(
+        apiUrl(`/api/reviews?id=${reviewId}&userId=${user.id}`),
+        {
+          method: 'DELETE',
+        }
+      );
       const json = await res.json();
       if (json.success) {
         await fetchReviews(restaurant.id);

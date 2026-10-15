@@ -19,6 +19,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { apiUrl } from '@/lib/api';
 import { Report, UserProfile, RoleDelegation } from '@/types/features';
 
 interface AdminModalProps {
@@ -54,7 +55,7 @@ export default function AdminModal({ isOpen, onClose }: AdminModalProps) {
   const fetchReports = useCallback(async () => {
     setIsLoadingReports(true);
     try {
-      const res = await fetch(`/api/reports?status=${filterStatus}`);
+      const res = await fetch(apiUrl(`/api/reports?status=${filterStatus}`));
       const json = await res.json();
       if (json.success && Array.isArray(json.reports)) {
         setReports(json.reports);
@@ -70,7 +71,7 @@ export default function AdminModal({ isOpen, onClose }: AdminModalProps) {
   const fetchUsersAndRoles = useCallback(async () => {
     setIsLoadingUsers(true);
     try {
-      const res = await fetch('/api/admin/roles');
+      const res = await fetch(apiUrl('/api/admin/roles'));
       const json = await res.json();
       if (json.success) {
         if (Array.isArray(json.users)) setUsersList(json.users);
@@ -101,7 +102,7 @@ export default function AdminModal({ isOpen, onClose }: AdminModalProps) {
     setActionLoadingId(reportId);
 
     try {
-      const res = await fetch('/api/reports', {
+      const res = await fetch(apiUrl('/api/reports'), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -137,7 +138,7 @@ export default function AdminModal({ isOpen, onClose }: AdminModalProps) {
 
     setRoleActionUserId(targetUser.id);
     try {
-      const res = await fetch('/api/admin/roles', {
+      const res = await fetch(apiUrl('/api/admin/roles'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -172,7 +173,7 @@ export default function AdminModal({ isOpen, onClose }: AdminModalProps) {
     setIsClaiming(true);
     setClaimMessage(null);
     try {
-      const res = await fetch('/api/admin/roles', {
+      const res = await fetch(apiUrl('/api/admin/roles'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
