@@ -17,7 +17,10 @@ import {
   AlertTriangle,
   RotateCcw,
   ChevronDown,
+  Heart,
 } from 'lucide-react';
+import AdminModal from '@/components/AdminModal';
+import { useAuth } from '@/context/AuthContext';
 
 import {
   Restaurant,
@@ -75,7 +78,16 @@ export default function Home() {
   const [isLoadingData, setIsLoadingData] = useState<boolean>(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  // 5. 모달 상태
+  // 5. 회원 인증, 즐겨찾기 및 관리자 상태
+  const { user, favoriteIds } = useAuth();
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState<boolean>(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState<boolean>(false);
+  const [favoriteRestaurants, setFavoriteRestaurants] = useState<
+    RestaurantWithDistance[]
+  >([]);
+  const [isLoadingFavorites, setIsLoadingFavorites] = useState<boolean>(false);
+
+  // 6. 모달 상태
   const [selectedRestaurant, setSelectedRestaurant] =
     useState<Restaurant | null>(null);
   const [isLocationModalOpen, setIsLocationModalOpen] =
@@ -156,10 +168,47 @@ export default function Home() {
     fetchRestaurantsData,
   ]);
 
+  // 사용자가 즐겨찾기(찜)한 식당 전체 목록 로드
+  const fetchUserFavorites = useCallback(async () => {
+    if (!user) {
+      setFavoriteRestaurants([]);
+      return;
+    }
+    setIsLoadingFavorites(true);
+    try {
+      const res = await fetch(`/api/favorites?userId=${user.id}`);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.favorites)) {
+        const items: RestaurantWithDistance[] = json.favorites.map(
+          (r: Restaurant) => ({
+            restaurant: r,
+            distance: calculateDistance(
+              currentLocation.latitude,
+              currentLocation.longitude,
+              r.latitude,
+              r.longitude
+            ),
+          })
+        );
+        setFavoriteRestaurants(items);
+      }
+    } catch (err) {
+      console.error('Failed to load user favorites:', err);
+    } finally {
+      setIsLoadingFavorites(false);
+    }
+  }, [user, currentLocation.latitude, currentLocation.longitude]);
+
+  useEffect(() => {
+    if (showFavoritesOnly) {
+      fetchUserFavorites();
+    }
+  }, [showFavoritesOnly, fetchUserFavorites, favoriteIds]);
+
   // 카테고리나 반경, 위치, 검색어 변경 시 페이징 개수 리셋
   useEffect(() => {
     setDisplayLimit(20);
-  }, [selectedCategory, selectedRadius, currentLocation, searchQuery]);
+  }, [selectedCategory, selectedRadius, currentLocation, searchQuery, showFavoritesOnly]);
 
   // 위치나 반경이 바뀌면 조회 건수를 기본 20건으로 초기화
   const handleLocationChange = (loc: {
@@ -256,12 +305,20 @@ export default function Home() {
     );
   }, []);
 
+  // 즐겨찾기 모드인지 일반 반경 탐색 모드인지에 따라 식당 풀 결정
+  const currentRestaurantPool = useMemo(() => {
+    if (showFavoritesOnly) {
+      return favoriteRestaurants;
+    }
+    return allRestaurantsWithDistance;
+  }, [showFavoritesOnly, favoriteRestaurants, allRestaurantsWithDistance]);
+
   // [핵심 해결] 카테고리별 개수 카운트:
   // 현재 반경 및 검색어 조건에 속한 전체 음식점을 기준으로 모든 카테고리 숫자를 계산합니다.
   // 따라서 다른 카테고리를 눌러도 다른 카테고리 숫자가 0으로 변하지 않고 본래 개수가 그대로 유지됩니다.
   const categoryCounts = useMemo(() => {
     const counts: Record<RestaurantCategory, number> = {
-      전체: allRestaurantsWithDistance.length,
+      전체: currentRestaurantPool.length,
       한식: 0,
       중식: 0,
       일식: 0,
@@ -271,7 +328,7 @@ export default function Home() {
       기타: 0,
     };
 
-    allRestaurantsWithDistance.forEach(({ restaurant }) => {
+    currentRestaurantPool.forEach(({ restaurant }) => {
       if (restaurant.category in counts) {
         counts[restaurant.category] += 1;
       } else {
@@ -280,18 +337,28 @@ export default function Home() {
     });
 
     return counts;
-  }, [allRestaurantsWithDistance]);
+  }, [currentRestaurantPool]);
 
   // [요구사항] 지도와 목록에 동일한 검색 결과를 표시하기 위한 통합 배열
   // 선택된 카테고리에 맞춰 필터링을 수행합니다. (전체일 경우 모두 표시)
   const filteredRestaurants = useMemo(() => {
-    if (selectedCategory === '전체') {
-      return allRestaurantsWithDistance;
+    let list = currentRestaurantPool;
+    if (showFavoritesOnly && searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      list = list.filter(
+        ({ restaurant }) =>
+          restaurant.name.toLowerCase().includes(q) ||
+          restaurant.roadAddress?.toLowerCase().includes(q) ||
+          restaurant.subCategory?.toLowerCase().includes(q)
+      );
     }
-    return allRestaurantsWithDistance.filter(
+    if (selectedCategory === '전체') {
+      return list;
+    }
+    return list.filter(
       ({ restaurant }) => restaurant.category === selectedCategory
     );
-  }, [allRestaurantsWithDistance, selectedCategory]);
+  }, [currentRestaurantPool, selectedCategory, showFavoritesOnly, searchQuery]);
 
   // 목록 뷰에서 20개씩 끊어서 보여줄 페이징 배열
   const displayedRestaurants = useMemo(() => {
@@ -301,23 +368,31 @@ export default function Home() {
   // 선택된 상세 식당의 거리
   const selectedRestaurantDistance = useMemo(() => {
     if (!selectedRestaurant) return null;
-    const found = allRestaurantsWithDistance.find(
+    const found = currentRestaurantPool.find(
       (item) => item.restaurant.id === selectedRestaurant.id
     );
-    return found ? found.distance : null;
-  }, [selectedRestaurant, allRestaurantsWithDistance]);
+    if (found) return found.distance;
+    return calculateDistance(
+      currentLocation.latitude,
+      currentLocation.longitude,
+      selectedRestaurant.latitude,
+      selectedRestaurant.longitude
+    );
+  }, [selectedRestaurant, currentRestaurantPool, currentLocation]);
 
   // 필터 초기화
   const handleResetFilters = () => {
     setSearchQuery('');
     setSelectedCategory('전체');
     setSelectedRadius(1000);
+    setShowFavoritesOnly(false);
   };
 
   const hasActiveFilters =
     Boolean(searchQuery.trim()) ||
     selectedCategory !== '전체' ||
-    selectedRadius !== 1000;
+    selectedRadius !== 1000 ||
+    showFavoritesOnly;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col text-gray-900 pb-24">
@@ -327,12 +402,15 @@ export default function Home() {
         isLocating={isLocating}
         isRealData={isRealData}
         isFromDb={isFromDb}
-        totalApiCount={totalApiCount}
+        totalApiCount={showFavoritesOnly ? favoriteRestaurants.length : totalApiCount}
+        showFavoritesOnly={showFavoritesOnly}
+        onToggleFavoritesOnly={() => setShowFavoritesOnly((prev) => !prev)}
         onOpenLocationModal={() => {
           setLocationErrorDetail(null);
           setIsLocationModalOpen(true);
         }}
         onRequestGeolocation={handleRequestGeolocation}
+        onOpenAdminModal={() => setIsAdminModalOpen(true)}
       />
 
       {/* 안내 토스트 (위치 변경 또는 권한 거부 시) */}
@@ -345,6 +423,28 @@ export default function Home() {
 
       {/* 2. 메인 컨텐츠 영역 */}
       <main className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto w-full px-4 pt-3 space-y-3.5 flex-1">
+        {/* 즐겨찾기 필터 모드 배너 */}
+        {showFavoritesOnly && (
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-900 flex items-center justify-between shadow-xs animate-in fade-in duration-200">
+            <div className="flex items-center gap-2">
+              <Heart className="w-4 h-4 text-rose-600 fill-rose-600 shrink-0" />
+              <div>
+                <span className="font-bold">내 즐겨찾기 맛집 모아보기</span>
+                <span className="text-[11px] text-rose-600 ml-1.5 font-medium">
+                  {isLoadingFavorites
+                    ? '(불러오는 중...)'
+                    : `(총 ${favoriteRestaurants.length}곳)`}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowFavoritesOnly(false)}
+              className="px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-lg text-xs font-semibold transition-colors shrink-0 shadow-2xs"
+            >
+              전체 맛집 보기
+            </button>
+          </div>
+        )}
         {/* 상단 퀵 액션 바: 내 주변 찾기 메인 버튼 & 현재 기준 동네 안내 & DB 갱신 */}
         <div className="bg-gradient-to-r from-emerald-600 to-teal-700 rounded-2xl p-3.5 text-white shadow-md flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -520,6 +620,12 @@ export default function Home() {
         }}
         onSelectLocation={handleLocationChange}
         onRequestGeolocation={handleRequestGeolocation}
+      />
+
+      {/* 7. 관리자 신고 접수 및 리뷰 관리 모달 */}
+      <AdminModal
+        isOpen={isAdminModalOpen}
+        onClose={() => setIsAdminModalOpen(false)}
       />
     </div>
   );
