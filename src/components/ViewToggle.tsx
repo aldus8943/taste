@@ -13,7 +13,7 @@ export default function ViewToggle({
   onToggle,
 }: ViewToggleProps) {
   return (
-    <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
+    <div className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))] left-1/2 transform -translate-x-1/2 z-40">
       <div className="bg-gray-900/90 text-white backdrop-blur-md px-1.5 py-1.5 rounded-full shadow-2xl border border-gray-700/60 flex items-center gap-1">
         <button
           onClick={() => onToggle('list')}

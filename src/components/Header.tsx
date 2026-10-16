@@ -33,7 +33,7 @@ export default function Header({
   const { user, profile, isAdmin, favoriteIds, openAuthModal, logout } = useAuth();
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200">
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 safe-top">
       <div className="max-w-md md:max-w-2xl lg:max-w-4xl mx-auto px-4 py-2.5">
         {/* 상단 1행: 로고 & 유저 인증/즐겨찾기/관리자 바 */}
         <div className="flex items-center justify-between gap-2 pb-2 border-b border-gray-100">
