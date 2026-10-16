@@ -13,30 +13,32 @@ export default function ViewToggle({
   onToggle,
 }: ViewToggleProps) {
   return (
-    <div className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))] left-1/2 transform -translate-x-1/2 z-40">
-      <div className="bg-gray-900/90 text-white backdrop-blur-md px-1.5 py-1.5 rounded-full shadow-2xl border border-gray-700/60 flex items-center gap-1">
+    <div className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))] left-1/2 transform -translate-x-1/2 z-40 pointer-events-auto">
+      <div className="bg-gray-900/90 text-white backdrop-blur-md px-1.5 py-1.5 rounded-full shadow-2xl border border-gray-700/60 flex items-center gap-1 whitespace-nowrap">
         <button
+          type="button"
           onClick={() => onToggle('list')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap shrink-0 active:scale-95 cursor-pointer ${
             currentView === 'list'
               ? 'bg-emerald-600 text-white shadow-md'
               : 'text-gray-300 hover:text-white'
           }`}
         >
-          <List className="w-3.5 h-3.5" />
-          <span>목록 보기</span>
+          <List className="w-3.5 h-3.5 shrink-0" />
+          <span className="whitespace-nowrap inline-block">목록 보기</span>
         </button>
 
         <button
+          type="button"
           onClick={() => onToggle('map')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap shrink-0 active:scale-95 cursor-pointer ${
             currentView === 'map'
               ? 'bg-emerald-600 text-white shadow-md'
               : 'text-gray-300 hover:text-white'
           }`}
         >
-          <Map className="w-3.5 h-3.5" />
-          <span>지도 보기</span>
+          <Map className="w-3.5 h-3.5 shrink-0" />
+          <span className="whitespace-nowrap inline-block">지도 보기</span>
         </button>
       </div>
     </div>
